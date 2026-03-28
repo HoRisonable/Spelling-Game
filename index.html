@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小一英文拼字大挑戰 (終極版) ⭐</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --primary: #4ECDC4;
+            --success: #7ED321;
+            --error: #FF6B6B;
+            --bg: #F0F9FF;
+            --text: #2C3E50;
+        }
+        body { font-family: 'Montserrat', 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; color: var(--text); }
+        .card { background: white; width: 95%; max-width: 500px; padding: 30px; border-radius: 25px; box-shadow: 0 15px 35px rgba(0,0,0,0.08); text-align: center; overflow: hidden; }
+        
+        /* 進度條 */
+        .progress-container { width: 100%; height: 10px; background: #E0F2F1; border-radius: 5px; margin-bottom: 25px; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--primary); width: 0%; transition: width 0.4s ease; }
+        
+        /* 單字區 */
+        .word-section { margin-bottom: 20px; }
+        .word-image { width: 150px; height: 150px; object-fit: contain; cursor: pointer; transition: transform 0.2s; filter: drop-shadow(0 5px 10px rgba(0,0,0,0.08)); }
+        .word-image:active { transform: scale(0.95); }
+        .btn-speak { background: none; border: none; font-size: 32px; cursor: pointer; color: var(--primary); margin-bottom: 15px; transition: 0.2s; vertical-align: middle; }
+        .btn-speak:hover { color: #36b5ac; transform: scale(1.1); }
+        
+        /* 字母輸入框 */
+        .letter-inputs { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 15px; }
+        .letter-box { width: 35px; height: 45px; font-size: 28px; font-family: monospace; text-align: center; border: 3px solid #CFD8DC; border-radius: 8px; outline: none; transition: all 0.2s; color: #546E7A; background: #ECEFF1; text-transform: lowercase; }
+        .letter-box.empty { background: white; border-color: #B0BEC5; color: var(--text); }
+        .letter-box.correct { background: #E8F5E9; border-color: var(--success); color: var(--success); }
+        .letter-box.incorrect { background: #FFEBEE; border-color: var(--error); color: var(--error); animation: shake 0.3s; }
+        
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+    </style>
+</head>
+<body>
+
+<div class="card" id="game-card">
+    <div class="progress-container"><div class="progress-bar" id="progress"></div></div>
+    
+    <div class="word-section">
+        <img id="word-img" class="word-image" onclick="speakCurrentWord()" title="點擊聽發音">
+        <span class="btn-speak" onclick="speakCurrentWord()" title="播放發音">🔊</span>
+    </div>
+    
+    <div id="hint-area" class="letter-inputs"></div>
+    
+    <p id="feedback" style="margin-top: 25px; min-height: 24px; font-weight: bold; font-size: 18px;"></p>
+</div>
+
+<script>
+    // 單字資料，這裡設定哪些字母要挖空（以 '_' 表示）
+    const data = [
+        { w: "fish",      pattern: "f_sh",   img: "https://img.freepik.com/free-vector/cute-orange-fish-swimming-cartoon-vector-icon-illustration_138676-4357.jpg" },
+        { w: "bird",      pattern: "_i_d",   img: "https://img.freepik.com/free-vector/cute-blue-bird-cartoon-character_1308-133545.jpg" },
+        { w: "circle",    pattern: "c_r_le", img: "https://img.freepik.com/free-vector/red-circle-basic-geometric-shape-kids_53876-146337.jpg" },
+        { w: "triangle",  pattern: "tr_a_gle",img: "https://img.freepik.com/free-vector/yellow-triangle-basic-geometric-shape-kids_53876-146338.jpg" },
+        { w: "polygon",   pattern: "p_l_gon", img: "https://img.freepik.com/free-vector/colorful-set-polygons-geometric-shapes_23-2148419230.jpg" },
+        { w: "reptile",   pattern: "r_pt_le",img: "https://img.freepik.com/free-vector/cute-turtle-walking-cartoon-vector-icon-illustration_138676-3914.jpg" },
+        { w: "amphibian", pattern: "a_p_ib_an",img: "https://img.freepik.com/free-vector/cute-frog-sitting-lotus-leaf-cartoon-vector-icon-illustration_138676-5380.jpg" }
+    ];
+
+    let current = 0;
+    const feedback = document.getElementById('feedback');
+    const hintArea = document.getElementById('hint-area');
+
+    function init() {
+        const item = data[current];
+        document.getElementById('word-img').src = item.img;
+        document.getElementById('progress').style.width = (current / data.length) * 100 + "%";
+        feedback.innerText = "";
+        
+        // 生成字母輸入框
+        hintArea.innerHTML = "";
+        for (let i = 0; i < item.w.length; i++) {
+            const char = item.pattern[i];
+            const correctChar = item.w[i];
+            
+            if (char === "_") {
+                // 是空格，建立可輸入的 input
+                const input = document.createElement('input');
+                input.type = "text";
+                input.maxLength = 1;
+                input.className = "letter-box empty";
+                input.dataset.correct = correctChar;
+                input.addEventListener('input', checkLetter);
+                hintArea.appendChild(input);
+            } else {
+                // 是已填好的字母，建立唯讀的 div
+                const div = document.createElement('div');
+                div.className = "letter-box";
+                div.innerText = char.toUpperCase();
+                hintArea.appendChild(div);
+            }
+        }
+        
+        // 自動聚焦到第一個空格
+        focusNextEmpty();
+    }
+
+    // 檢查輸入的單個字母
+    function checkLetter(e) {
+        const input = e.target;
+        const val = input.value.toLowerCase();
+        const correct = input.dataset.correct;
+        
+        if (val === "") return; // 如果刪除字母，不進行檢查
+
+        if (val === correct) {
+            // 答對字母
+            input.classList.remove('empty', 'incorrect');
+            input.classList.add('correct');
+            input.disabled = true; // 鎖定正確的字母
+            
+            if (checkWordComplete()) {
+                // 整支單字完成
+                handleWordComplete();
+            } else {
+                // 跳到下一個空格
+                focusNextEmpty();
+            }
+        } else {
+            // 答錯字母
+            input.classList.add('incorrect');
+            input.value = ""; // 清空錯誤的輸入
+            setTimeout(() => input.classList.remove('incorrect'), 300); // 移除震動動畫
+        }
+    }
+
+    // 檢查整個單字是否都填寫正確了
+    function checkWordComplete() {
+        const emptyInputs = hintArea.querySelectorAll('input.empty, input.incorrect');
+        return emptyInputs.length === 0;
+    }
+
+    // 處理單字完成後的邏輯
+    function handleWordComplete() {
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+        feedback.innerText = "Fantastic! 🌟";
+        feedback.style.color = "var(--success)";
+        
+        setTimeout(() => {
+            current++;
+            if (current < data.length) {
+                init();
+            } else {
+                showFinish();
+            }
+        }, 1800);
+    }
+
+    // 尋找並聚焦下一個空格
+    function focusNextEmpty() {
+        const nextEmpty = hintArea.querySelector('input.empty');
+        if (nextEmpty) nextEmpty.focus();
+    }
+
+    // 播放發音
+    function speakCurrentWord() {
+        const msg = new SpeechSynthesisUtterance(data[current].w);
+        msg.lang = 'en-US';
+        msg.rate = 0.9; // 稍微放慢一點速度
+        window.speechSynthesis.speak(msg);
+    }
+
+    // 顯示完成頁面
+    function showFinish() {
+        document.getElementById('game-card').innerHTML = `
+            <div style="font-size: 60px; margin-bottom:15px;">🏆</div>
+            <h2 style="font-size:32px; color:var(--text);">Super Spelling Star!</h2>
+            <p style="font-size:18px; color:#607D8B;">You did a great job today.</p>
+            <button onclick="location.reload()" style="background:var(--primary); color:white; border:none; padding:15px 35px; border-radius:50px; cursor:pointer; font-size:18px; margin-top:15px; box-shadow:0 5px 10px rgba(78,205,196,0.3);">Play Again</button>
+        `;
+    }
+
+    init();
+</script>
+
+</body>
+</html>
