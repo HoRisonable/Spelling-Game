@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>單字探險家 Word Explorer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #e0f7fa; /* 淺藍色背景，像海洋 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #game-container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 30px;
+            box-shadow: 0px 10px 20px rgba(0,0,0,0.15);
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+            position: relative;
+        }
+
+        h1 {
+            color: #0277bd;
+            margin-top: 0;
+            font-size: 2em;
+        }
+
+        #hint-container {
+            font-size: 80px; /* 大大的提示圖示 */
+            margin-bottom: 10px;
+        }
+
+        #word-text {
+            font-size: 24px;
+            color: #555;
+            margin-bottom: 25px;
+            font-weight: bold;
+        }
+
+        #drop-zone {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            min-height: 80px;
+        }
+
+        .letter-slot {
+            width: 60px;
+            height: 70px;
+            border: 4px dashed #b2ebf2;
+            border-radius: 15px;
+            background-color: #f9f9f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: #0277bd;
+            text-transform: uppercase;
+        }
+
+        #letter-bank {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .draggable-letter {
+            width: 60px;
+            height: 70px;
+            background-color: #ffb74d; /* 橘色，醒目 */
+            color: white;
+            border-radius: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: grab;
+            box-shadow: 0 4px #e65100;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+
+        .draggable-letter:active {
+            transform: translateY(4px);
+            box-shadow: 0 0px #e65100;
+            cursor: grabbing;
+        }
+
+        .correct {
+            background-color: #81c784 !important; /* 綠色，答對 */
+            border: 4px solid #4caf50 !important;
+            color: white !important;
+            animation: popIn 0.5s ease;
+        }
+
+        .wrong {
+            animation: shake 0.3s ease;
+            background-color: #ef5350 !important; /* 紅色，答錯 */
+            box-shadow: 0 4px #b71c1c;
+        }
+
+        #feedback {
+            font-size: 24px;
+            font-weight: bold;
+            height: 30px;
+            margin-top: 20px;
+        }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h1>✨ 單字探險家 ✨</h1>
+        
+        <div id="hint-container">🐟</div>
+        <div id="word-text">魚 (Fish)</div>
+        
+        <div id="drop-zone">
+            </div>
+        
+        <div id="letter-bank">
+            </div>
+        
+        <div id="feedback"></div>
+    </div>
+
+    <audio id="correct-sound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_145262c589.mp3"></audio>
+
+    <script>
+        // 遊戲的單字清單，包含圖示、中文和拼音提示
+        const words = [
+            { word: "fish", hint: "🐟", text: "魚 (Fish)" },
+            { word: "bird", hint: "🐦", text: "鳥 (Bird)" },
+            { word: "circle", hint: "🔴", text: "圓形 (Circle)" },
+            { word: "triangle", hint: "🔺", text: "三角形 (Triangle)" },
+            { word: "polygon", hint: "🛑", text: "多邊形 (Polygon)" },
+            { word: "reptile", hint: "🦎", text: "爬蟲類 (Reptile)" },
+            { word: "amphibian", hint: "🐸", text: "兩棲類 (Amphibian)" }
+        ];
+
+        let currentIndex = 0;
+        let currentWord = "";
+        let correctCount = 0;
+
+        function loadWord() {
+            const data = words[currentIndex];
+            currentWord = data.word;
+            correctCount = 0;
+            document.getElementById("hint-container").innerText = data.hint;
+            document.getElementById("word-text").innerText = data.text;
+            document.getElementById("feedback").innerText = "";
+            
+            // 1. 清除舊的內容
+            const dropZone = document.getElementById("drop-zone");
+            const letterBank = document.getElementById("letter-bank");
+            dropZone.innerHTML = "";
+            letterBank.innerHTML = "";
+
+            // 2. 建立字母槽 (Drop Zone)
+            for (let i = 0; i < currentWord.length; i++) {
+                const slot = document.createElement("div");
+                slot.className = "letter-slot";
+                slot.dataset.index = i; // 儲存這個槽是第幾個字母
+                dropZone.appendChild(slot);
+            }
+
+            // 3. 建立打散的字母 (Letter Bank)
+            let shuffledLetters = currentWord.split('').sort(() => 0.5 - Math.random());
+            shuffledLetters.forEach(letter => {
+                const letterEl = document.createElement("div");
+                letterEl.className = "draggable-letter";
+                letterEl.innerText = letter;
+                letterEl.draggable = true;
+                letterEl.dataset.letter = letter;
+                
+                // 加入拖曳事件
+                letterEl.addEventListener("dragstart", dragStart);
+                letterEl.addEventListener("dragend", dragEnd);
+                
+                // 加入點擊事件 (為了方便在平板上遊玩)
+                letterEl.addEventListener("click", letterClick);
+                
+                letterBank.appendChild(letterEl);
+            });
+
+            // 讓槽位可以接收拖曳
+            const slots = document.querySelectorAll(".letter-slot");
+            slots.forEach(slot => {
+                slot.addEventListener("dragover", dragOver);
+                slot.addEventListener("drop", dropLetter);
+            });
+        }
+
+        // --- 拖曳邏輯 ---
+        let draggedLetter = null;
+
+        function dragStart(e) {
+            draggedLetter = this;
+            this.style.opacity = "0.5";
+            e.dataTransfer.setData("text/plain", this.dataset.letter);
+        }
+
+        function dragEnd() {
+            this.style.opacity = "1";
+        }
+
+        function dragOver(e) {
+            e.preventDefault(); // 必須阻止預設行為才能 drop
+        }
+
+        function dropLetter(e) {
+            e.preventDefault();
+            if (this.innerText !== "") return; // 如果槽位已經有字母，就不做反應
+
+            const droppedLetter = e.dataTransfer.getData("text/plain");
+            const slotIndex = this.dataset.index;
+
+            // 檢查拼字是否正確
+            if (droppedLetter === currentWord[slotIndex]) {
+                this.innerText = droppedLetter;
+                this.classList.add("correct");
+                
+                // 找到原本的字母把它隱藏
+                draggedLetter.style.visibility = "hidden";
+                
+                correctCount++;
+                checkWin();
+            } else {
+                // 答錯了，震動並變紅
+                this.classList.add("wrong");
+                setTimeout(() => this.classList.remove("wrong"), 300);
+            }
+        }
+
+        // --- 點擊邏輯 (優化平板體驗) ---
+        let selectedSlot = null;
+
+        function letterClick() {
+            // 在點擊模式下，我們先找到第一個空的、正確的槽位
+            let targetSlot = null;
+            const slots = document.querySelectorAll(".letter-slot");
+            
+            for (let slot of slots) {
+                if (slot.innerText === "" && this.dataset.letter === currentWord[slot.dataset.index]) {
+                    targetSlot = slot;
+                    break;
+                }
+            }
+
+            if (targetSlot) {
+                targetSlot.innerText = this.dataset.letter;
+                targetSlot.classList.add("correct");
+                this.style.visibility = "hidden";
+                correctCount++;
+                checkWin();
+            } else {
+                // 如果點選的字母沒有對應的空槽位，變紅震動
+                this.classList.add("wrong");
+                setTimeout(() => this.classList.remove("wrong"), 300);
+            }
+        }
+
+        function checkWin() {
+            if (correctCount === currentWord.length) {
+                document.getElementById("feedback").innerText = "🎉 太棒了！你答對了！";
+                document.getElementById("feedback").style.color = "#4caf50";
+                
+                // 播放音效
+                document.getElementById("correct-sound").play();
+                
+                // 1.5 秒後進入下一個單字
+                setTimeout(() => {
+                    currentIndex = (currentIndex + 1) % words.length;
+                    loadWord();
+                }, 1500);
+            }
+        }
+
+        // 啟動遊戲
+        loadWord();
+    </script>
+
+</body>
+</html>
